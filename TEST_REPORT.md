@@ -16,7 +16,7 @@ Status: functional full-screen renderer alpha; production acceptance not met
 | Forge | 65.1.0 |
 | Forge MCP build | 20260616.103818 |
 | Backend | OpenGL 4.6 core |
-| GPU | AMD Radeon (TM) Graphics |
+| GPU | Intel Iris (TM) Graphics |
 | Driver string | 26.5.2.260413 |
 | LWJGL | 3.4.1+2 |
 
