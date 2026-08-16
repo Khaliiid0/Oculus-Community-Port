@@ -1,5 +1,28 @@
 # Test Report
 
+## Current release: 0.3.0-beta.1
+
+Date: 2026-08-16
+Target: Minecraft 26.2 / Forge 65.1.0 / Java 25
+Hardware: Ryzen 5 5625U, integrated AMD Radeon, 16 GB DDR4
+
+- clean `packageRelease --warning-mode all`: passed
+- shader compatibility tests: 6 passed
+- hostile-pack/security tests: 10 passed
+- BSL v10.1.1 and Complementary Reimagined r5.7.1 preparation: passed
+- final beta Complementary activation and real-world execution: passed
+- F11 resize and 30-second render soak: passed
+- live unsupported-replacement recovery by source recompile: passed
+- normal shutdown and all-dimension save: passed
+- Microsoft Defender production-JAR scan: zero new detections
+
+The portable release report is `OCP-0.3.0-beta.1-VALIDATION.md` in the
+distribution output. Stable 1.0 gates remain documented in
+`RELEASE_GATES.md`.
+
+## Historical 0.2.0-alpha.1 evidence
+
+
 Date: 2026-07-28
 
 Release: `0.2.0-alpha.1`
@@ -138,8 +161,8 @@ verification remain incomplete.
 
 | Artifact | Bytes | SHA-256 |
 |---|---:|---|
-| `oculus-forge-26.2-0.2.0-alpha.1.jar` | 211,258 | `8076ddbe5de834c1187c7d88d078332e26e7fe5e20e104bafa944c42a1aada52` |
-| `oculus-forge-26.2-0.2.0-alpha.1-sources.jar` | 142,268 | `1e99cea4dfdd519da7d820e606dc5edfe93df321ca0c48aca51899094133b78a` |
+| `oculus-forge-26.2-0.3.0-beta.1.jar` | 246,738 | `45136ecd87dc054e5c4db3954ece22608440eda7cd745c251cbe8b837e10dc2a` |
+| `oculus-forge-26.2-0.3.0-beta.1-sources.jar` | 88,995 | `d54f2831ab34c8c4b473ab8f31a30da4caa2f961cc1b778308ee517eb1fd8826` |
 
 The binary contains 50 production classes plus Forge metadata, `pack.mcmeta`,
 the icon and translation, LGPL license, license notes, and notice. No test

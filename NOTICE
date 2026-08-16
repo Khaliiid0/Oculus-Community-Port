@@ -1,15 +1,18 @@
-Oculus Forge 26.2 Community Port
-================================
+Oculus Community Port for Forge
+===============================
 
 This is an unofficial community port. It is not an official release of Oculus,
 Iris, Forge, Sodium, Embeddium, Mojang, or Microsoft.
 
 The project is derived from Oculus and Iris code and documentation distributed
 under GNU LGPL version 3. See LICENSE-oculus-forge.txt in the binary JAR and the
-corresponding source distribution.
+complete corresponding source for Minecraft 1.21.11 and 26.2 in this repository.
 
 Minecraft and Mojang are trademarks of Microsoft Corporation. This project is
 not affiliated with or endorsed by Microsoft or Mojang.
+
+This distribution includes JCPP 1.4.14, Copyright Shevek, under the Apache
+License 2.0. Its packages are relocated under dev.oculusforge.bundle.jcpp.
 
 OptiFine is not supported and is incompatible with Oculus.
 

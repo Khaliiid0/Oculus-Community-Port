@@ -1,5 +1,60 @@
 # Changelog
 
+## 0.3.0-beta.1 - 2026-08-16
+
+First public beta and renderer-hardening release.
+
+### Improved
+
+- replace active shader generations transactionally; after resource reload, a
+  failed replacement recompiles the last-known-good prepared source into a fresh
+  GPU generation and reports the degraded state in the config screen
+- ping-pong multi-stage rendering between the main and temporary targets,
+  reducing full-screen texture copies from one per stage to zero for even stage
+  counts or one for odd stage counts
+- reuse one command encoder across the ordered full-screen stage sequence
+- enforce file-count, total-size, per-file, and symbolic-link policy while
+  discovering directory packs without first materializing the whole file list
+- enforce a cumulative decompressed-read budget for ZIP pack sessions
+
+### Verified
+
+- 16 compatibility and hostile-pack regression tests on each Minecraft target
+- Java compilation with all lint checks and Gradle 9.6 with all warnings enabled
+- real-pack preparation remains compatible with Complementary Reimagined r5.7.1
+  and BSL v10.1.1
+
+### Release status
+
+This is a beta of the safe full-screen compatibility renderer. Stable 1.0 still
+requires terrain/entity gbuffers, shadow rendering, the full attachment/texture
+model, a broader pack matrix, and long-duration frametime/leak qualification.
+
+
+## 0.2.0-alpha.2 - 2026-08-15
+
+Shader-pack discovery and stability update.
+
+### Fixed
+
+- discover active programs under `shaders/world0`, with the root `shaders`
+  layout retained for compatibility packs
+- preprocess pack conditionals and expanded includes before GLSL adaptation
+- accept comma-separated uniform declarations and ignore unused declarations
+- support current legacy color/depth attachment aliases and common final-pass
+  uniforms used by Complementary Reimagined and BSL
+- use Forge's non-deprecated three-argument frame-pass extraction API
+- map legacy uniform buffers before opening the GPU render pass, matching the
+  stricter Forge 61 ordering and remaining valid on Forge 65
+- enable native access explicitly on Java run/test tasks
+
+### Verified
+
+- Gradle 9.6.0 build with `--warning-mode all` and no deprecation warnings
+- six focused shader compatibility/security regression tests
+- source preparation of Complementary Reimagined r5.7.1 and BSL v10.1.1
+- reproducible production JAR with a relocated, bundled JCPP preprocessor
+
 ## 0.2.0-alpha.1 - 2026-07-28
 
 Functional full-screen shader milestone; not a complete Oculus port.

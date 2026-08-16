@@ -8,6 +8,7 @@ plugins {
     id 'idea'
     id 'eclipse'
     id 'net.minecraftforge.gradle' version '7.0.31'
+    id 'com.gradleup.shadow' version '9.4.2'
 }
 
 group = mod_group
@@ -51,8 +52,14 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    bundle
+    implementation.extendsFrom bundle
+}
+
 dependencies {
     implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+    bundle('org.anarres:jcpp:1.4.14') { transitive = false }
     annotationProcessor 'net.minecraftforge:eventbus-validator:7.0.5'
 
     testImplementation platform("org.junit:junit-bom:${junit_version}")
@@ -74,10 +81,23 @@ tasks.withType(AbstractArchiveTask).configureEach {
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
     maxHeapSize = '1G'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
     testLogging {
         events = [TestLogEvent.FAILED, TestLogEvent.SKIPPED]
         exceptionFormat = TestExceptionFormat.FULL
     }
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+
+tasks.register('auditShaderPacks', JavaExec) {
+    group = 'verification'
+    description = 'Prepares shader-pack sources without starting Minecraft or creating GPU resources.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.oculusforge.tools.ShaderPackAuditMain'
 }
 
 def resourceProperties = [
@@ -108,6 +128,7 @@ tasks.named('compileTestJava', JavaCompile).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    archiveClassifier = 'slim'
     duplicatesStrategy = DuplicatesStrategy.FAIL
 
     from(rootProject.file('LICENSE')) {
@@ -127,6 +148,33 @@ tasks.named('jar', Jar).configure {
     }
 }
 
+tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configure {
+    archiveClassifier = ''
+    configurations = [project.configurations.bundle]
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    exclude 'META-INF/MANIFEST.MF', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/*.SF'
+    relocate 'org.anarres.cpp', 'dev.oculusforge.bundle.jcpp'
+
+    from(rootProject.file('LICENSE')) {
+        rename { 'LICENSE-oculus-forge.txt' }
+    }
+    from(rootProject.file('LICENSE_NOTES.md'))
+    from(rootProject.file('NOTICE'))
+    from(rootProject.file('third_party/JCPP-LICENSE.txt')) {
+        into 'META-INF/licenses'
+    }
+
+    manifest {
+        attributes(
+            'Implementation-Title': mod_name,
+            'Implementation-Version': mod_version,
+            'Implementation-Vendor': 'Oculus Forge 26.2 community port contributors',
+            'Specification-Title': 'Oculus shader-pack loader',
+            'Specification-Version': mod_version
+        )
+    }
+}
+
 def requiredJarEntries = [
     'META-INF/mods.toml',
     'pack.mcmeta',
@@ -134,16 +182,17 @@ def requiredJarEntries = [
     'assets/oculus/lang/en_us.json',
     'LICENSE-oculus-forge.txt',
     'LICENSE_NOTES.md',
-    'NOTICE'
+    'NOTICE',
+    'META-INF/licenses/JCPP-LICENSE.txt'
 ]
-def productionJarFile = tasks.named('jar', Jar).flatMap { it.archiveFile }
+def productionJarFile = tasks.named('shadowJar', Jar).flatMap { it.archiveFile }
 def sourceJarFile = tasks.named('sourcesJar', Jar).flatMap { it.archiveFile }
 def expectedProductionName = "oculus-forge-${minecraft_version}-${mod_version}.jar"
 
 tasks.register('verifyJarResources') {
     group = 'verification'
     description = 'Checks that the distributable JAR contains required Forge and legal resources.'
-    dependsOn tasks.named('jar')
+    dependsOn tasks.named('shadowJar')
     inputs.file(productionJarFile)
 
     doLast {
@@ -164,7 +213,7 @@ tasks.register('verifyJarResources') {
 tasks.register('verifyNoDuplicateClasses') {
     group = 'verification'
     description = 'Fails if the production JAR contains duplicate class entry names.'
-    dependsOn tasks.named('jar')
+    dependsOn tasks.named('shadowJar')
     inputs.file(productionJarFile)
 
     doLast {
@@ -190,7 +239,7 @@ tasks.register('verifyNoDuplicateClasses') {
 tasks.register('verifyProductionArtifact') {
     group = 'verification'
     description = 'Verifies the production artifact name and rejects dev/source classifiers.'
-    dependsOn tasks.named('jar')
+    dependsOn tasks.named('shadowJar')
     inputs.file(productionJarFile)
 
     doLast {
@@ -235,6 +284,10 @@ tasks.named('check').configure {
     dependsOn tasks.named('verifyJarResources')
     dependsOn tasks.named('verifyNoDuplicateClasses')
     dependsOn tasks.named('verifyProductionArtifact')
+}
+
+tasks.named('build').configure {
+    dependsOn tasks.named('shadowJar')
 }
 
 tasks.register('packageRelease', Sync) {

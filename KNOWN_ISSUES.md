@@ -11,7 +11,7 @@
   targets are unsupported.
 - The complete ShadersMod/OptiFine/Iris directive, property, profile, expression,
   and preprocessor model is not present.
-- This means the alpha does not satisfy the promise that every existing
+- This means the beta does not satisfy the promise that every existing
   ShadersMod/OptiFine pack works unmodified. Lightweight full-screen packs and
   compatible final/composite stages are the current test surface.
 
@@ -39,8 +39,8 @@ unverified.
 
 ## Lifecycle and validation gaps
 
-- Tests used a synthetic legal shader pack, not a diverse set of externally
-  downloaded packs.
+- Automated source preparation and live AMD iGPU runs cover Complementary
+  Reimagined r5.7.1 and BSL v10.1.1, but not a diverse pack matrix.
 - A standalone launcher installation containing only the binary JAR has not been
   run; runtime verification used ForgeGradle's client.
 - In-session F11 fullscreen toggling, dimension travel, resource-pack changes,
@@ -61,9 +61,8 @@ unverified.
 - Archive declared-size and per-read limits are enforced. The current pack
   session does not track one cumulative actual-decompressed-byte budget across
   every later read.
-- Macro expansion covers bounded object macros; full GLSL conditional and
-  function-macro behavior is delegated to the graphics compiler only after the
-  port's source adaptation.
+- Conditional and function-macro preprocessing uses the bounded, relocated JCPP
+  implementation after secure include expansion.
 
 ## Unrelated test-environment messages
 

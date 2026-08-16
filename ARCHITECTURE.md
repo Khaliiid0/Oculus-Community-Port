@@ -2,7 +2,7 @@
 
 ## Status boundary
 
-This alpha implements a real Forge 26.2 full-screen shader pipeline, but not the
+This beta implements a real Forge 26.2 full-screen shader pipeline, but not the
 complete Oculus world renderer. It deliberately rejects unsupported pack
 features instead of installing compatibility stubs or suppressing failures.
 
@@ -24,8 +24,10 @@ Pack activation follows two thread domains:
    render thread and atomically installs the resulting pipeline.
 
 Disabling shaders triggers the same reload path and closes the active uniform
-buffers. A failed preparation, compile, or render pass disables the custom
-pipeline and leaves the vanilla frame available.
+buffers. Replacement compilation is transactional: after resource reload,
+preparation or compilation failure recompiles the last-known-good prepared
+source into a fresh GPU generation and exposes an explicit UI error. A runtime
+render failure disables the failed pipeline and restores vanilla.
 
 ## Pack trust boundary
 
@@ -59,8 +61,9 @@ resource identifiers so Minecraft's pipeline cache cannot alias different pack
 generations.
 
 `OculusCompositePass` declares the main target to the Forge frame graph. For an
-active pipeline, it leases a same-size temporary color target, copies main color
-into it, draws the stage back to main, and repeats for every program. The
+active pipeline, it leases a same-size temporary color target and ping-pongs
+successive stages between main and temporary color. Even stage counts require no
+full-screen copy; odd stage counts require one final copy back to main. The
 current main depth texture is available to recognized legacy depth samplers.
 Stable render-target descriptors are cached by size.
 

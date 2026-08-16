@@ -1,108 +1,125 @@
-# Oculus Forge 26.2 Community Port
+# Oculus Community Port
 
-> Unofficial functional alpha for Minecraft 26.2 / Forge 65.1.0
+> Unofficial client-side Forge shader port for Minecraft 1.21.11 and 26.2.
 
-This repository is an independent, LGPL-3.0-only community port. It is not an
-official Oculus, Iris, Forge, Mojang, Microsoft, Sodium, or Embeddium release.
+This repository contains the complete corresponding source for every
+`0.3.0-beta.1` binary published by the Oculus Community Port project. It is
+licensed under `LGPL-3.0-only` and is not an official Oculus, Iris, Forge,
+Mojang, Microsoft, Sodium, Embeddium, OptiFine, or shader-pack release.
 
-Version `0.2.0-alpha.1` contains a working OpenGL frame-graph shader path. It can
-load a shader-pack directory or ZIP, compile compatible legacy `deferred*`,
-`composite*`, and `final` programs, execute them in order over the rendered
-world, update common uniforms, and return safely to vanilla rendering when
-disabled or when compilation fails.
+## Corresponding source map
 
-This is still an alpha, not the complete Oculus compatibility renderer requested
-for production. Packs that require terrain/entity gbuffer programs, shadow
-rendering, additional color attachments, normal/specular textures, custom
-textures, or the full OptiFine/Iris directive language will not work yet. See
-[KNOWN_ISSUES.md](KNOWN_ISSUES.md) before testing.
+| Published binary | Minecraft / Forge / Java | Source directory |
+|---|---|---|
+| `oculus-forge-26.2-0.3.0-beta.1.jar` | 26.2 / 65.1.0 / Java 25 | Repository root |
+| `oculus-forge-1.21.11-0.3.0-beta.1.jar` | 1.21.11 / 61.2.0 / Java 21 | [`versions/1.21.11`](versions/1.21.11) |
 
-## Target
+Each source directory contains its own Java sources, resources, tests, Gradle
+build scripts, Gradle wrapper, dependency notices, license notices, and the
+relocated JCPP license. The generated `-sources.jar` for each published binary
+is also provided as an additional file with that version.
 
-- Minecraft Java Edition 26.2
-- Minecraft Forge 65.1.0 (`net.minecraftforge:forge:26.2-65.1.0`)
-- Java 25
-- Gradle 9.5.0 and ForgeGradle 7.0.31
-- OpenGL only for shader-pack rendering
-- Vulkan detected and rejected with vanilla fallback
-- OptiFine detected and rejected
+## Release status
+
+Version `0.3.0-beta.1` is the first public beta. It provides a hardened OpenGL
+frame-graph path for compatible full-screen shader-pack stages. It discovers
+programs under both the root `shaders` layout and `shaders/world0`, preprocesses
+conditional GLSL, updates common uniforms, replaces packs transactionally, and
+returns safely to vanilla rendering when a pack cannot be compiled or executed.
+
+Complementary Reimagined r5.7.1 and BSL v10.1.1 passed the real-pack preparation
+and compatible `world0/final` activation tests on both supported Minecraft
+targets.
+
+This remains a beta. Terrain/entity gbuffers, complete shadow rendering, the
+full attachment and custom-texture model, complete OptiFine/Iris semantics, and
+Vulkan shader-pack rendering are not implemented. Pack activation therefore
+does not imply complete Iris/Oculus visual parity. See
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md).
 
 ## Implemented
 
-- live Forge 26.2 `AddFramePassEvent` integration without mixins or access
-  transformers
-- ordered `deferred*`, `composite*`, and `final` full-screen stages
-- compatible legacy fragment and fixed-function full-screen vertex adaptation
-- main color and depth sampling, including forward-depth emulation for legacy
-  depth reads on Minecraft's reversed-depth target
-- common time, frame, camera, fog, sky, weather, view, and world uniform updates
+- client-only Forge integration through the current frame graph
+- deterministic compatible `deferred*`, `composite*`, and `final` stages
+- legacy full-screen vertex and fragment adaptation
+- `shaders/world0` and root `shaders` program discovery
+- bounded includes and conditional GLSL preprocessing
+- common frame, time, camera, fog, sky, weather, view, and world uniforms
 - asynchronous pack preparation and render-thread GPU compilation
-- live enable/disable and pack switching through resource reload
-- cached pipeline descriptors and mapped uniform ring buffers
-- safe fallback when source adaptation, compilation, or pass execution fails
-- shader-pack directory and non-extracting ZIP discovery
-- bounded includes, strict UTF-8, cycle/path traversal/decompression defenses
+- transactional pack switching with last-known-good source recovery
+- ping-pong multi-stage rendering with at most one final texture copy
+- mapped uniform ring buffers and cached render-target descriptors
+- secure directory and non-extracting ZIP pack loading
+- traversal, symlink, archive-size, compression, UTF-8, and include limits
 - Forge-native configuration screen and atomic configuration persistence
-- production and sources JARs, checksums, duplicate-class checks, and required
-  resource verification
+- reproducible production and sources JARs with SHA-256 sidecars
 
-## Performance and compatibility policy
+## Build Minecraft 26.2
 
-Shaders-disabled rendering leaves vanilla world rendering intact and does not
-compile or execute shader programs. Enabled rendering uses Minecraft's GPU
-abstraction and Forge frame graph, keeps source and archive work off the render
-thread, caches stable descriptors, and avoids per-frame pack I/O or compilation.
-
-Rubidium is not used: it is obsolete for this target. No authoritative
-Forge-compatible Embeddium/Sodium release for Minecraft 26.2 was found. This
-alpha therefore integrates with Forge/vanilla locally rather than fabricating a
-dependency or copying incompatible Sodium code. Future renderer integrations
-must be optional, API-guarded, and license-compatible.
-
-The compatibility goal remains unmodified ShadersMod/OptiFine packs, but this
-release only implements the full-screen portion of that model. Unsupported
-samplers, uniforms, outputs, and programs produce an explicit diagnostic and
-vanilla fallback; they are not silently replaced with fake values.
-
-## Build
-
-Use a Java 25 JDK:
+Use a Java 25 JDK from the repository root:
 
 ```powershell
-.\gradlew.bat clean build
+.\gradlew.bat clean build --warning-mode all
 .\gradlew.bat packageRelease
 ```
 
-Linux:
+Linux or macOS:
 
 ```bash
-./gradlew clean build
+./gradlew clean build --warning-mode all
 ./gradlew packageRelease
 ```
 
-Artifacts:
+## Build Minecraft 1.21.11
 
-- `build/libs/oculus-forge-26.2-0.2.0-alpha.1.jar`
-- `build/libs/oculus-forge-26.2-0.2.0-alpha.1-sources.jar`
-- matching `.sha256` files
+Use a Java 21 JDK:
 
-The development branch is `port/forge-26.2`.
+```powershell
+cd versions\1.21.11
+.\gradlew.bat clean build --warning-mode all
+.\gradlew.bat packageRelease
+```
+
+Linux or macOS:
+
+```bash
+cd versions/1.21.11
+./gradlew clean build --warning-mode all
+./gradlew packageRelease
+```
 
 ## Test
 
-Place the binary JAR in a Forge 65.1.0 Minecraft 26.2 `mods` folder. Put shader
-packs in the instance's `shaderpacks` directory and select them through
-Mods -> Oculus -> Config.
+Run the focused compatibility and hostile-input test suite from either source
+directory:
 
-The included runtime evidence covers OpenGL startup, title/world loading,
-single- and two-stage shader execution, legacy `final.vsh`, shaders-disabled
-fallback, window-size target recreation, repeated startup, and clean shutdown.
-It does not cover a representative real-world shader-pack matrix or every
-acceptance scenario. Exact evidence is in [TEST_REPORT.md](TEST_REPORT.md), with
-remaining procedures in [MANUAL_TEST_PLAN.md](MANUAL_TEST_PLAN.md).
+```powershell
+.\gradlew.bat test --warning-mode all
+```
+
+The beta passed 16 automated tests on each Minecraft target and was live-tested
+on a Ryzen 5 5625U with integrated AMD Radeon graphics and OpenGL 4.6. See
+[`TEST_REPORT.md`](TEST_REPORT.md) and
+[`versions/1.21.11/TEST_REPORT.md`](versions/1.21.11/TEST_REPORT.md).
 
 ## License and attribution
 
-The port is licensed under LGPL-3.0-only; see [LICENSE](LICENSE),
-[LICENSE_NOTES.md](LICENSE_NOTES.md), and [NOTICE](NOTICE). Corresponding source
-is this source tree and the generated sources JAR.
+Oculus Community Port is distributed under GNU LGPL version 3 only. See
+[`LICENSE`](LICENSE), [`LICENSE_NOTES.md`](LICENSE_NOTES.md), and
+[`NOTICE`](NOTICE).
+
+- Community port and corresponding source: this repository
+- Original Oculus: https://github.com/Asek3/Oculus
+- Iris: https://github.com/IrisShaders/Iris
+
+The bundled and relocated JCPP 1.4.14 dependency is Apache-2.0 licensed; its
+license is included under `third_party` and in the generated artifacts.
+
+## Issues
+
+Report community-port problems here:
+
+https://github.com/Khaliiid0/Oculus-Community-Port/issues
+
+Do not report community-port bugs to the original Oculus, Iris, or shader-pack
+developers.

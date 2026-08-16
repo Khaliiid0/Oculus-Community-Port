@@ -1,7 +1,7 @@
 # Manual Test Plan
 
 This plan defines remaining verification for the Forge 26.2 shader pipeline.
-The current alpha can execute compatible full-screen stages; the broader
+The current beta can execute compatible full-screen stages; the broader
 world-rendering and real-pack matrix below is still required.
 
 ## Test setup
@@ -16,7 +16,7 @@ world-rendering and real-pack matrix below is still required.
 8. Use shader packs whose download terms permit testing and record name,
    version, URL, hash, license/terms, and selected options.
 
-## Current-alpha smoke test
+## Current-beta smoke test
 
 1. Start with no `config/oculus.properties`.
 2. Launch the client.

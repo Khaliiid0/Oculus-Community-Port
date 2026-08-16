@@ -4,6 +4,7 @@ release/
 out/
 run/
 run-*/
+logs/
 classes/
 *.launch
 .idea/
