@@ -1,0 +1,1 @@
+#define NEGATIVE_FORMAT 0

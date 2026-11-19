@@ -1,0 +1,2 @@
+# Local failed-build and audit evidence; retain on disk, not in public sources.
+/*.log

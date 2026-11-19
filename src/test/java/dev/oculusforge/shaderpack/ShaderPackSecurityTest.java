@@ -82,6 +82,18 @@ final class ShaderPackSecurityTest {
     }
 
     @Test
+    void cumulativeDirectoryReadBudgetIsEnforced() throws Exception {
+        Files.writeString(temporaryDirectory.resolve("source.glsl"), "123456");
+        try (DirectoryPackFileSystem pack = new DirectoryPackFileSystem(
+                temporaryDirectory, limits(8, 10, 4, 4, 4, 32))) {
+            VirtualPath shader = VirtualPath.parse("source.glsl");
+            assertEquals(6, pack.read(shader).length);
+            ShaderPackException exception = assertThrows(ShaderPackException.class, () -> pack.read(shader));
+            assertEquals(ShaderPackException.Code.ARCHIVE_LIMIT_EXCEEDED, exception.code());
+        }
+    }
+
+    @Test
     void zipTraversalEntryIsRejected() throws Exception {
         Path archive = createZip(Map.of("../escape.glsl", "x".getBytes()));
 

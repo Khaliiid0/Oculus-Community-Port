@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "decision": "limited-beta-build-accepted",
+  "reviewDate": "2026-11-19",
+  "version": "0.4.0-beta.4",
+  "minecraft": "26.3",
+  "forge": "66.1.2",
+  "java": 25,
+  "rendererDefault": "OFF",
+  "transparency": "classic",
+  "fullIrisParity": false,
+  "timedActiveSoakPassed": false,
+  "platformUploadAuthorized": false
+}

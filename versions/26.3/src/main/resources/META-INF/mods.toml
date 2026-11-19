@@ -1,0 +1,34 @@
+modLoader="javafml"
+loaderVersion="[66.1,67)"
+license="LGPL-3.0-only"
+issueTrackerURL="https://github.com/Khaliiid0/Oculus-Community-Port/issues"
+clientSideOnly=true
+
+[[mods]]
+modId="oculus"
+version="${mod_version}"
+displayName="Oculus Forge 26.3 Community Port"
+displayURL="https://github.com/Khaliiid0/Oculus-Community-Port"
+logoFile="oculus-logo.png"
+authors="Original Oculus and Iris contributors; unofficial community port contributors"
+description='''Limited beta of the unofficial Oculus Community Port for Minecraft 26.3 / Forge 66.1.2 / Java 25.
+Terrain, terrain-shadow, post-processing and bounded static-material rendering; not complete Iris parity.
+Recorded checks cover BSL v10.1.1 and Complementary Reimagined r5.7.1, not every pack option or profile.
+The limited world renderer is opt-in in Oculus settings and takes effect after restarting Minecraft.
+Developer JVM renderer options remain advanced overrides. World rendering is OFF by default.
+OpenGL only. OptiFine and other shader renderers are incompatible.
+Unofficial; not endorsed by Oculus, Iris, Forge or Mojang.'''
+
+[[dependencies.oculus]]
+modId="forge"
+mandatory=true
+versionRange="[66.1.2,67)"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.oculus]]
+modId="minecraft"
+mandatory=true
+versionRange="[26.3]"
+ordering="NONE"
+side="CLIENT"

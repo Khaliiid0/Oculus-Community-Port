@@ -11,8 +11,10 @@ public record OculusConfig(boolean shadersEnabled, String selectedPack) {
          && selectedPack.indexOf(92) < 0
          && !selectedPack.contains("..")
          && selectedPack.indexOf(0) < 0
+         && selectedPack.chars().noneMatch(character -> Character.isISOControl(character)
+            || "<>:\"|?*".indexOf(character) >= 0)
          && selectedPack.length() <= 255) {
-         this.shadersEnabled = shadersEnabled;
+         this.shadersEnabled = shadersEnabled && !selectedPack.isEmpty();
          this.selectedPack = selectedPack;
       } else {
          throw new IllegalArgumentException("Selected shader pack must be a safe file name");

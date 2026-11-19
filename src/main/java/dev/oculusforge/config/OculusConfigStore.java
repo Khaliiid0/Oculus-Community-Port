@@ -1,6 +1,8 @@
 package dev.oculusforge.config;
 
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
@@ -10,6 +12,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.Properties;
 
 public final class OculusConfigStore {
+   static final int MAX_CONFIG_BYTES = 65536;
    private static final String ENABLED = "shaders.enabled";
    private static final String PACK = "shaderpack";
    private final Path path;
@@ -28,7 +31,7 @@ public final class OculusConfigStore {
       } else {
          Properties properties = new Properties();
 
-         try (InputStream input = Files.newInputStream(this.path)) {
+         try (InputStream input = new ByteArrayInputStream(readBounded(this.path))) {
             properties.load(input);
          }
 
@@ -63,7 +66,7 @@ public final class OculusConfigStore {
          properties.setProperty("shaderpack", config.selectedPack());
 
          try (OutputStream output = Files.newOutputStream(temporary)) {
-            properties.store(output, "Unofficial Oculus Forge 26.2 configuration");
+            properties.store(output, "Unofficial Oculus Forge configuration");
          }
 
          try {
@@ -77,6 +80,24 @@ public final class OculusConfigStore {
          if (!moved) {
             Files.deleteIfExists(temporary);
          }
+      }
+   }
+
+   private static byte[] readBounded(Path path) throws IOException {
+      try (InputStream input = Files.newInputStream(path);
+           ByteArrayOutputStream output = new ByteArrayOutputStream(4096)) {
+         byte[] buffer = new byte[4096];
+         int total = 0;
+         for (int count = input.read(buffer); count >= 0; count = input.read(buffer)) {
+            total = Math.addExact(total, count);
+            if (total > MAX_CONFIG_BYTES) {
+               throw new IOException("Oculus configuration exceeds " + MAX_CONFIG_BYTES + " bytes");
+            }
+            output.write(buffer, 0, count);
+         }
+         return output.toByteArray();
+      } catch (ArithmeticException exception) {
+         throw new IOException("Oculus configuration size overflow", exception);
       }
    }
 }

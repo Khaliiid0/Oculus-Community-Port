@@ -1,6 +1,8 @@
 package dev.oculusforge.shaderpack;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
@@ -13,6 +15,7 @@ public final class DirectoryPackFileSystem implements PackFileSystem {
    private final Path root;
    private final ShaderPackLimits limits;
    private final Set<VirtualPath> files;
+   private long totalReadBytes;
 
    public DirectoryPackFileSystem(Path root, ShaderPackLimits limits) throws IOException {
       this.root = root.toRealPath();
@@ -99,9 +102,41 @@ public final class DirectoryPackFileSystem implements PackFileSystem {
                   ShaderPackException.Code.FILE_LIMIT_EXCEEDED, "Shader source exceeds " + this.limits.maxFileBytes() + " bytes: " + path, path.toString()
                );
             } else {
-               return Files.readAllBytes(real);
+               byte[] data;
+               try (InputStream input = Files.newInputStream(real, LinkOption.NOFOLLOW_LINKS);
+                    ByteArrayOutputStream output = new ByteArrayOutputStream((int)Math.min(size, 8192L))) {
+                  byte[] buffer = new byte[16384];
+                  long total = 0L;
+                  for (int count = input.read(buffer); count >= 0; count = input.read(buffer)) {
+                     total = Math.addExact(total, count);
+                     if (total > this.limits.maxFileBytes()) {
+                        throw new ShaderPackException(ShaderPackException.Code.FILE_LIMIT_EXCEEDED,
+                           "Shader source grew beyond " + this.limits.maxFileBytes() + " bytes while reading: " + path, path.toString());
+                     }
+                     output.write(buffer, 0, count);
+                  }
+                  data = output.toByteArray();
+               } catch (ArithmeticException exception) {
+                  throw new ShaderPackException(ShaderPackException.Code.FILE_LIMIT_EXCEEDED,
+                     "Shader source size overflow while reading: " + path, path.toString(), exception);
+               }
+               reserveReadBudget(data.length, path);
+               return data;
             }
          }
+      }
+   }
+
+   private synchronized void reserveReadBudget(long bytes, VirtualPath path) throws ShaderPackException {
+      try {
+         this.totalReadBytes = Math.addExact(this.totalReadBytes, bytes);
+      } catch (ArithmeticException exception) {
+         throw new ShaderPackException(ShaderPackException.Code.ARCHIVE_LIMIT_EXCEEDED,
+            "Cumulative directory-pack reads overflow the supported range", path.toString(), exception);
+      }
+      if (this.totalReadBytes > this.limits.maxArchiveBytes()) {
+         throw new ShaderPackException(ShaderPackException.Code.ARCHIVE_LIMIT_EXCEEDED,
+            "Cumulative directory-pack reads exceed " + this.limits.maxArchiveBytes() + " bytes", path.toString());
       }
    }
 

@@ -26,8 +26,12 @@ public final class OculusForge {
       AddFramePassEvent.BUS
          .addListener(event -> event.addPass(Identifier.fromNamespaceAndPath("oculus", "shaderpack_final"), this.clientService.compositePass()));
       GameShuttingDownEvent.BUS.addListener(event -> this.clientService.close());
+      net.minecraftforge.client.event.ClientPlayerNetworkEvent.LoggingOut.BUS.addListener(event ->
+         net.minecraft.client.Minecraft.getInstance().execute(dev.oculusforge.render.world.WorldRenderHooks::resetWorld));
       MinecraftForge.registerConfigScreen(parent -> new ShaderPackScreen(parent, this.clientService));
    }
+
+   public OculusClientService clientService() { return this.clientService; }
 
    private void onClientSetup(FMLClientSetupEvent event) {
       event.enqueueWork(this.clientService::initializeOnRenderThread);

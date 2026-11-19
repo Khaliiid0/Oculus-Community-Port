@@ -1,0 +1,41 @@
+#version 120
+uniform int frameCounter;
+varying float vertexSample;
+const float expectedOffset=0.0;
+uniform sampler2D colortex0;
+uniform sampler2D colortex1;
+uniform sampler2D colortex2;
+uniform sampler2D colortex3;
+uniform sampler2D colortex4;
+uniform sampler2D colortex5;
+uniform sampler2D colortex6;
+uniform sampler2D colortex7;
+uniform sampler2D colortex8;
+uniform sampler2D colortex9;
+uniform sampler2D colortex10;
+uniform sampler2D colortex11;
+uniform sampler2D colortex12;
+uniform sampler2D colortex13;
+uniform sampler2D colortex14;
+uniform sampler2D colortex15;
+void main(){
+    float parity=float(frameCounter%2)*0.5;
+    bool valid=abs(vertexSample-(16.0/32.0+parity))<0.004;
+    valid=valid&&abs(texture2D(colortex0,vec2(0.5)).r-(1.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex1,vec2(0.5)).r-(2.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex2,vec2(0.5)).r-(3.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex3,vec2(0.5)).r-(4.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex4,vec2(0.5)).r-(5.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex5,vec2(0.5)).r-(6.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex6,vec2(0.5)).r-(7.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex7,vec2(0.5)).r-(8.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex8,vec2(0.5)).r-(9.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex9,vec2(0.5)).r-(10.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex10,vec2(0.5)).r-(11.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex11,vec2(0.5)).r-(12.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex12,vec2(0.5)).r-(13.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex13,vec2(0.5)).r-(14.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex14,vec2(0.5)).r-(15.0/32.0+parity+expectedOffset))<0.004;
+    valid=valid&&abs(texture2D(colortex15,vec2(0.5)).r-(16.0/32.0+parity+expectedOffset))<0.004;
+    gl_FragColor=valid?vec4(0.0,1.0,0.0,1.0):vec4(1.0,0.0,1.0,1.0);
+}

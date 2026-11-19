@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.oculusforge.audit.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "DeferredPassFaultMixin",
+    "DeferredScratchFaultMixin",
+    "FullscreenFaultMixin",
+    "DeferredCopyFaultMixin",
+    "DeferredRecoveryAuditMixin",
+    "SceneEndAuditMixin"
+  ],
+  "injectors": { "defaultRequire": 1 }
+}

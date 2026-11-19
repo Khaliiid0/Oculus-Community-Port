@@ -1,0 +1,414 @@
+import java.util.zip.ZipFile
+
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '7.0.31'
+    id 'com.gradleup.shadow' version '9.4.2'
+}
+
+group = 'dev.oculusforge'
+// A private packaged-JAR audit is distinct from publication and source-client runs.
+def privateCandidateValue = providers.gradleProperty('oculusPrivateCandidate').orElse('false').get()
+if (!(privateCandidateValue in ['true', 'false'])) throw new GradleException('oculusPrivateCandidate must be true or false')
+def privateCandidateEnabled = privateCandidateValue == 'true'
+def artifactVersion = privateCandidateEnabled ? "${mod_version}-private-audit" : mod_version.toString()
+version = artifactVersion
+if (privateCandidateEnabled) {
+    layout.buildDirectory.set(layout.projectDirectory.dir('build-private-candidate'))
+    if (providers.gradleProperty('oculusRuntimeAudit').orElse('false').get() == 'true'
+        || providers.gradleProperty('oculusDeferredFaultAudit').orElse('false').get() == 'true') {
+        throw new GradleException('Private JAR candidates cannot use source-only/fault runtime roots')
+    }
+    if (providers.gradleProperty('oculusExtendedTerrain').orElse('false').get() != 'true'
+        || providers.gradleProperty('oculusHdrWorldScene').orElse('false').get() != 'true') {
+        throw new GradleException('Private candidate qualification requires both extended-terrain and HDR test modes')
+    }
+}
+base.archivesName = "oculus-forge-${minecraft_version}"
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+}
+
+// Keep the tested 26.2 workspace and frozen candidates intact. Share portable
+// sources, but allow explicit 26.3 replacements without duplicate Java classes.
+def sharedRoot = file('../..')
+// 66.1.2 fixes indexed blend enables upstream. Do not compile or package the
+// 26.2 workaround, which would bypass the new backend's own blend-state cache.
+sourceSets.main.java.exclude('dev/oculusforge/mixin/GlCommandEncoderMixin.java')
+['main', 'test'].each { name ->
+    def sharedJava = new File(sharedRoot, "src/${name}/java")
+    def localJava = file("src/${name}/java")
+    sourceSets.named(name) {
+        java.srcDir(sharedJava)
+        java.exclude { element ->
+            element.file.toPath().startsWith(sharedJava.toPath()) &&
+                new File(localJava, element.path).isFile()
+        }
+    }
+}
+def sharedResources = new File(sharedRoot, 'src/main/resources')
+def localResources = file('src/main/resources')
+sourceSets.main.resources {
+    srcDir(sharedResources)
+    exclude { element ->
+        element.file.toPath().startsWith(sharedResources.toPath()) &&
+            new File(localResources, element.path).isFile()
+    }
+}
+sourceSets.test.resources.srcDir(new File(sharedRoot, 'test-packs'))
+sourceSets.test.resources.srcDir(new File(sharedRoot, 'src/test/resources'))
+sourceSets.test.resources.srcDir('runtime-fixtures')
+
+// Can verify new API contracts independently while renderer migration still
+// prevents compileJava. Passing this task does NOT mean the mod builds or runs.
+sourceSets {
+    portAudit {
+        java.srcDir('src/main/java')
+        java.include('dev/oculusforge/port/**')
+    }
+}
+configurations.portAuditImplementation.extendsFrom(configurations.implementation, configurations.testImplementation)
+configurations.portAuditRuntimeOnly.extendsFrom(configurations.testRuntimeOnly)
+tasks.register('portApiAudit', Test) {
+    description = 'Tests the 26.3 source-provider and descriptor-copy prerequisites, not GPU compatibility.'
+    group = 'verification'
+    testClassesDirs = sourceSets.portAudit.output.classesDirs
+    classpath = sourceSets.portAudit.runtimeClasspath
+}
+
+// Explicit source-only qualification run. This never unlocks any JAR task.
+def runtimeAuditEnabled = providers.gradleProperty('oculusRuntimeAudit').orElse('false').get() == 'true'
+def deferredFaultAuditEnabled = providers.gradleProperty('oculusDeferredFaultAudit').orElse('false').get() == 'true'
+if (deferredFaultAuditEnabled && !runtimeAuditEnabled) {
+    throw new GradleException('Deferred fault injection requires the isolated source-only runtime audit.')
+}
+// Deliberately separate from main/test and every JAR. Only the explicit audit
+// launch adds these classes/resources to the development mod's source roots.
+if (deferredFaultAuditEnabled) {
+    sourceSets.create('faultAudit') {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+    configurations.faultAuditImplementation.extendsFrom(configurations.implementation)
+    configurations.faultAuditCompileOnly.extendsFrom(configurations.compileOnly)
+    configurations.faultAuditAnnotationProcessor.extendsFrom(configurations.annotationProcessor)
+    tasks.register('prepareFaultAuditRuntime', Sync) {
+        from(sourceSets.main.output)
+        from(sourceSets.faultAudit.output)
+        into(layout.buildDirectory.dir('source-only-fault-runtime'))
+    }
+}
+
+minecraft {
+    runs {
+        register('client') {
+            workingDir = layout.projectDirectory.dir(runtimeAuditEnabled ? 'run-runtime-audit' : 'run')
+            args '--mixin.config=oculus.mixins.json'
+            if (deferredFaultAuditEnabled) {
+                args '--mixin.config=oculus-fault-audit.mixins.json'
+                // Forge discovers directory mods as one root. Keep the merged
+                // development root separate from every normal output/JAR.
+                environment 'MOD_CLASSES', 'oculus%%' + layout.buildDirectory.dir('source-only-fault-runtime').get().asFile.absolutePath
+            }
+            if (runtimeAuditEnabled) {
+                args '--width', '960', '--height', '540'
+                jvmArgs '-Xmx2G', '--enable-native-access=ALL-UNNAMED'
+                systemProperty 'mixin.debug.countInjections', 'true'
+                systemProperty 'mixin.debug.verbose', 'true'
+                systemProperty 'mixin.debug.export', 'true'
+                // Upstream F3+M controls the real terrain backend for qualification.
+                // All other MC_DEBUG flags keep their default false value.
+                if (providers.gradleProperty('oculusChunkDebugKeys').orElse('false').get() == 'true') {
+                    systemProperty 'MC_DEBUG_ENABLED', 'true'
+                    systemProperty 'MC_DEBUG_HOTKEYS', 'true'
+                }
+                // Existing bounded, one-frame captures; fixed to the disposable
+                // Overworld audit, never enabled by the ordinary launch path.
+                if (providers.gradleProperty('oculusStageCapture').orElse('false').get() == 'true') {
+                    systemProperty 'oculus.diagnostic.captureWorldStages', 'true'
+                    systemProperty 'oculus.diagnostic.capturePostStages', 'true'
+                    systemProperty 'oculus.diagnostic.captureRoot', 'shaders/world0'
+                }
+            }
+            systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+            systemProperty 'forge.logging.console.level', 'info'
+            if (providers.gradleProperty('oculusExtendedTerrain').isPresent())
+                systemProperty 'oculus.experimental.extendedTerrain', providers.gradleProperty('oculusExtendedTerrain').get()
+            if (providers.gradleProperty('oculusHdrWorldScene').isPresent())
+                systemProperty 'oculus.experimental.hdrWorldScene', providers.gradleProperty('oculusHdrWorldScene').get()
+        }
+    }
+}
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+configurations {
+    bundle
+    implementation.extendsFrom bundle
+}
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+    bundle('org.anarres:jcpp:1.4.14') { transitive = false }
+    annotationProcessor 'net.minecraftforge:eventbus-validator:7.0.6'
+    annotationProcessor 'org.spongepowered:mixin:0.8.7:processor'
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+    options.compilerArgs.addAll(['-Xlint:all', '-Xlint:-processing'])
+}
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+}
+tasks.named('compileJava').configure { mustRunAfter tasks.named('processResources') }
+tasks.named('compileTestJava').configure { mustRunAfter tasks.named('processTestResources') }
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    maxHeapSize = '1G'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'oculus.experimental.extendedTerrain', providers.gradleProperty('oculusExtendedTerrain').orElse('false').get()
+    systemProperty 'oculus.experimental.hdrWorldScene', providers.gradleProperty('oculusHdrWorldScene').orElse('false').get()
+}
+tasks.register('auditShaderPacks', JavaExec) {
+    group = 'verification'
+    description = 'Prepares shader-pack sources for 26.3 without starting Minecraft; not GPU compatibility certification.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.oculusforge.tools.ShaderPackAuditMain'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'oculus.experimental.extendedTerrain', providers.gradleProperty('oculusExtendedTerrain').orElse('false').get()
+    systemProperty 'oculus.experimental.hdrWorldScene', providers.gradleProperty('oculusHdrWorldScene').orElse('false').get()
+}
+tasks.register('auditShadercPacks', JavaExec) {
+    group = 'verification'
+    description = 'Runs real ShaderC on prepared 26.3 post/terrain/shadow stages; no GPU or publication approval.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.oculusforge.tools.ShadercPackAuditMain'
+    maxHeapSize = '1G'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'oculus.experimental.extendedTerrain', providers.gradleProperty('oculusExtendedTerrain').orElse('false').get()
+    systemProperty 'oculus.experimental.hdrWorldScene', providers.gradleProperty('oculusHdrWorldScene').orElse('false').get()
+}
+tasks.register('prepareWaterProbePacks', JavaExec) {
+    group = 'verification'
+    description = 'Creates new local-only water isolation probes from a supplied pack; never overwrites or distributes it.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.oculusforge.tools.WaterProbePacksMain'
+    maxHeapSize = '1G'
+}
+tasks.register('generateNormalAuditResources', JavaExec) {
+    group = 'verification'
+    description = 'Writes original numeric PNG data into a new isolated audit resource pack; never overwrites files.'
+    dependsOn tasks.named('testClasses')
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.oculusforge.tools.NormalFixtureMain'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+processResources {
+    def metadata = [mod_version: artifactVersion]
+    inputs.properties(metadata)
+    filesMatching('META-INF/mods.toml') { expand(metadata) }
+}
+tasks.named('jar', Jar).configure { archiveClassifier = 'slim' }
+tasks.named('shadowJar', com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar).configure {
+    archiveClassifier = ''
+    configurations = [project.configurations.bundle]
+    exclude 'META-INF/MANIFEST.MF', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/*.SF'
+    relocate 'org.anarres.cpp', 'dev.oculusforge.bundle.jcpp'
+}
+[tasks.named('jar'), tasks.named('shadowJar'), tasks.named('sourcesJar')].each { task ->
+    task.configure {
+        from(new File(sharedRoot, 'LICENSE')) { rename { 'LICENSE-oculus-forge.txt' } }
+        from(file('licenses/GPL-3.0.txt')) { rename { 'LICENSE-GPL-3.0.txt' } }
+        from(file('LICENSE_NOTES.md'))
+        from(file('NOTICE'))
+        from(new File(sharedRoot, 'third_party/JCPP-LICENSE.txt')) { into 'META-INF/licenses' }
+        manifest.attributes(
+            'Implementation-Title': 'Oculus Forge 26.3 Community Port',
+            'Implementation-Version': artifactVersion,
+            'Implementation-Vendor': 'Oculus community port contributors',
+            'MixinConfigs': 'oculus.mixins.json')
+        if (privateCandidateEnabled) {
+            manifest.attributes('Oculus-Publication-Status': 'PRIVATE-UNQUALIFIED')
+        }
+    }
+}
+def artifact = tasks.named('shadowJar', Jar).flatMap { it.archiveFile }
+def expectedArtifactName = "oculus-forge-26.3-${artifactVersion}.jar"
+tasks.register('verifyProductionArtifact') {
+    dependsOn tasks.named('shadowJar')
+    inputs.file(artifact)
+    doLast {
+        def binary = artifact.get().asFile
+        if (binary.name != expectedArtifactName) {
+            throw new GradleException("Incorrect 26.3 artifact: ${binary.name}")
+        }
+        new ZipFile(binary).withCloseable { zip ->
+            def entries = zip.entries().collect { it.name }
+            if (entries.size() != entries.toSet().size()) throw new GradleException('Duplicate JAR entries')
+            def metadata = zip.getInputStream(zip.getEntry('META-INF/mods.toml')).withCloseable { it.getText('UTF-8') }
+            if (!metadata.contains('version="' + artifactVersion + '"')) throw new GradleException('Artifact version metadata differs')
+            def manifest = zip.getInputStream(zip.getEntry('META-INF/MANIFEST.MF')).withCloseable {
+                new java.util.jar.Manifest(it)
+            }
+            if (manifest.mainAttributes.getValue('Implementation-Version') != artifactVersion.toString()) {
+                throw new GradleException('Artifact manifest version differs')
+            }
+            if (privateCandidateEnabled) {
+                if (manifest.mainAttributes.getValue('Oculus-Publication-Status') != 'PRIVATE-UNQUALIFIED') {
+                    throw new GradleException('Missing private publication marker')
+                }
+            } else if (manifest.mainAttributes.getValue('Oculus-Publication-Status') != null
+                || metadata.contains('PRIVATE-UNQUALIFIED') || metadata.contains('Development checkpoint')) {
+                throw new GradleException('Private checkpoint metadata leaked into public beta')
+            }
+            ['META-INF/mods.toml', 'oculus.mixins.json', 'pack.mcmeta', 'oculus-logo.png',
+             'LICENSE-oculus-forge.txt', 'LICENSE-GPL-3.0.txt', 'LICENSE_NOTES.md', 'NOTICE',
+             'META-INF/licenses/JCPP-LICENSE.txt', 'dev/oculusforge/bundle/jcpp/Preprocessor.class'].each {
+                if (!entries.contains(it)) throw new GradleException("Missing production resource: ${it}")
+            }
+            def config = zip.getInputStream(zip.getEntry('oculus.mixins.json')).withCloseable {
+                new groovy.json.JsonSlurper().parse(it, 'UTF-8')
+            }
+            ((config.client ?: []) + (config.mixins ?: [])).each {
+                def path = "${config['package']}.${it}".replace('.', '/') + '.class'
+                if (!entries.contains(path)) throw new GradleException("Missing mixin: ${path}")
+            }
+            if (entries.any { it.startsWith('dev/oculusforge/testing/') || it.startsWith('dev/oculusforge/audit/')
+                || it == 'oculus-fault-audit.mixins.json' || it.startsWith('test-packs/')
+                || it.startsWith('runtime-fixtures/') || it.endsWith('/shaders.properties')
+                || it.endsWith('.vsh') || it.endsWith('.fsh') || it.endsWith('.glsl') }) {
+                throw new GradleException('Developer shader fixtures must not be distributed')
+            }
+        }
+    }
+}
+
+def distributionNoticeFiles = [
+    'LICENSE-oculus-forge.txt': new File(sharedRoot, 'LICENSE'),
+    'LICENSE-GPL-3.0.txt': file('licenses/GPL-3.0.txt'),
+    'NOTICE': file('NOTICE'),
+    'LICENSE_NOTES.md': file('LICENSE_NOTES.md'),
+    'META-INF/licenses/JCPP-LICENSE.txt': new File(sharedRoot, 'third_party/JCPP-LICENSE.txt')
+]
+tasks.register('verifyDistributionNotices') {
+    group = 'verification'
+    description = 'Verifies full license texts and 26.3 notice context in binary and sources; not legal/publication approval.'
+    dependsOn tasks.named('shadowJar'), tasks.named('sourcesJar')
+    def archives = files(tasks.named('shadowJar', Jar).flatMap { it.archiveFile },
+        tasks.named('sourcesJar', Jar).flatMap { it.archiveFile })
+    inputs.files(archives)
+    inputs.files(distributionNoticeFiles.values())
+    doLast { task ->
+        def expected = distributionNoticeFiles.collectEntries { name, source -> [(name): source.bytes] }
+        def noticeText = new String(expected['NOTICE'], java.nio.charset.StandardCharsets.UTF_8)
+        if (!noticeText.contains('Minecraft 26.3 / Forge 66.1.2 / Java 25')
+            || noticeText.contains('complete corresponding source for Minecraft 1.21.11 and 26.2')) {
+            throw new GradleException('Stale or missing module notice context')
+        }
+        archives.files.each { archive ->
+            new ZipFile(archive).withCloseable { zip ->
+                expected.each { name, bytes ->
+                    def entry = zip.getEntry(name)
+                    if (entry == null || !Arrays.equals(zip.getInputStream(entry).withCloseable { it.bytes }, bytes))
+                        throw new GradleException("Missing/changed distribution notice ${name} in ${archive.name}")
+                }
+            }
+        }
+    }
+}
+tasks.named('check').configure { dependsOn tasks.named('verifyProductionArtifact'), tasks.named('verifyDistributionNotices') }
+tasks.named('build').configure { dependsOn tasks.named('shadowJar') }
+
+// Exact-version acceptance supersedes the historical migration hold. This is
+// build eligibility, NOT platform upload or full Iris compatibility approval.
+def betaAcceptanceFile = file('release-acceptance.json')
+def betaAcceptanceVersion = mod_version.toString()
+def betaAcceptanceMinecraft = minecraft_version.toString()
+def betaAcceptanceForge = forge_version.toString()
+tasks.register('verifyPortReadiness') {
+    group = 'verification'
+    description = 'Checks the reviewed exact-version limited-beta build decision; no platform upload approval.'
+    dependsOn tasks.named('test'), tasks.named('portApiAudit'), tasks.named('verifyFaultAuditIsolation')
+    inputs.file(betaAcceptanceFile)
+    inputs.properties(version: betaAcceptanceVersion, minecraft: betaAcceptanceMinecraft, forge: betaAcceptanceForge,
+        sourceRuntime: runtimeAuditEnabled, faultRuntime: deferredFaultAuditEnabled)
+    doLast {
+        def decision = new groovy.json.JsonSlurper().parse(betaAcceptanceFile, 'UTF-8')
+        if (decision.schema != 1 || decision.decision != 'limited-beta-build-accepted'
+            || decision.version != betaAcceptanceVersion || betaAcceptanceVersion != '0.4.0-beta.4'
+            || decision.minecraft != betaAcceptanceMinecraft || betaAcceptanceMinecraft != '26.3'
+            || decision.forge != betaAcceptanceForge || betaAcceptanceForge != '66.1.2'
+            || decision.java != 25 || decision.rendererDefault != 'OFF'
+            || decision.transparency != 'classic' || decision.fullIrisParity != false
+            || decision.timedActiveSoakPassed != false || decision.platformUploadAuthorized != false
+            || runtimeAuditEnabled || deferredFaultAuditEnabled) {
+            throw new GradleException('No reviewed limited-beta build decision for this version/configuration; source/fault runtime roots cannot produce public JARs.')
+        }
+    }
+}
+tasks.register('verifyPrivateCandidateIntent') {
+    group = 'verification'
+    description = 'Local packaged-JAR qualification only; never authorizes upload.'
+    dependsOn tasks.named('test'), tasks.named('portApiAudit'), tasks.named('verifyFaultAuditIsolation')
+    doLast {
+        if (!privateCandidateEnabled) throw new GradleException('Explicit oculusPrivateCandidate=true is required')
+    }
+}
+tasks.withType(Jar).configureEach {
+    dependsOn tasks.named(privateCandidateEnabled ? 'verifyPrivateCandidateIntent' : 'verifyPortReadiness')
+}
+tasks.register('preparePrivateBetaCandidate') {
+    group = 'build'
+    description = 'Creates marked local audit binary/sources in build-private-candidate; DO NOT UPLOAD.'
+    dependsOn tasks.named('verifyPrivateCandidateIntent'), tasks.named('shadowJar'),
+        tasks.named('sourcesJar'), tasks.named('verifyProductionArtifact'), tasks.named('verifyDistributionNotices')
+}
+tasks.register('verifyRuntimeAuditPrerequisites') {
+    group = 'verification'
+    description = 'CPU prerequisites for the isolated source-only 26.3 client; does not grant publication readiness.'
+    dependsOn tasks.named('test'), tasks.named('portApiAudit'), tasks.named('verifyFaultAuditIsolation')
+}
+
+tasks.register('verifyFaultAuditIsolation') {
+    group = 'verification'
+    description = 'Confirms source-only fault injection classes/configuration are absent from main outputs.'
+    dependsOn tasks.named('classes')
+    inputs.files(sourceSets.main.output)
+    doLast { task ->
+        def forbidden = task.inputs.files.asFileTree.matching {
+            include 'dev/oculusforge/audit/**', '**/oculus-fault-audit.mixins.json'
+        }.files
+        if (!forbidden.empty) throw new GradleException('Fault harness leaked into main outputs: ' + forbidden)
+    }
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named(runtimeAuditEnabled ? 'verifyRuntimeAuditPrerequisites' : 'verifyPortReadiness')
+    if (deferredFaultAuditEnabled) {
+        dependsOn tasks.named('prepareFaultAuditRuntime')
+    }
+}
+
+if (deferredFaultAuditEnabled) {
+    // FG finishes its runtime-classpath convention during project evaluation.
+    // Override only this audit task, after that convention has been applied.
+    afterEvaluate {
+        tasks.named('runClient').configure {
+            setClasspath(classpath.minus(sourceSets.main.output).plus(files(layout.buildDirectory.dir('source-only-fault-runtime'))))
+            runtimeClasspath.setFrom(sourceSets.main.runtimeClasspath.minus(sourceSets.main.output),
+                layout.buildDirectory.dir('source-only-fault-runtime'))
+        }
+    }
+}

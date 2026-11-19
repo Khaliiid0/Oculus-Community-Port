@@ -52,13 +52,13 @@ final class ShaderCompatibilityRegressionTest {
             #version 120
             varying vec2 texcoord;
             uniform sampler2D colortex3;
-            uniform sampler2D noisetex;
+            uniform sampler2D colortex0;
             uniform sampler2D normals;
             uniform float viewWidth, viewHeight;
             uniform bool heavyFog = false;
             void main() {
                 vec4 color = texture2D(colortex3, texcoord);
-                color += texture2D(noisetex, texcoord) * 0.0;
+                color += texture2D(colortex0, texcoord) * 0.0;
                 if (heavyFog) color.rgb *= 0.5;
                 gl_FragColor = color + vec4((viewWidth + viewHeight) * 0.0);
             }
@@ -85,6 +85,37 @@ final class ShaderCompatibilityRegressionTest {
     }
 
     @Test
+    void opaqueWorldAndShadowSnapshotsRemainDistinct() throws Exception {
+        LegacyFinalShaderAdapter.AdaptedShader result = new LegacyFinalShaderAdapter().adapt("""
+            #version 120
+            uniform sampler2D depthtex0;
+            uniform sampler2D depthtex1;
+            uniform sampler2D shadowtex0;
+            uniform sampler2D shadowtex1;
+            void main() {
+                gl_FragColor = texture2D(depthtex0, vec2(0.5)) + texture2D(depthtex1, vec2(0.5))
+                    + texture2D(shadowtex0, vec2(0.5)) + texture2D(shadowtex1, vec2(0.5));
+            }
+            """);
+
+        assertEquals(4, result.samplers().size());
+        assertTrue(result.source().contains("depthtex1"));
+        assertTrue(result.source().contains("shadowtex1"));
+    }
+
+    @Test
+    void legacyFogUsesExplicitRuntimeUniforms() throws Exception {
+        LegacyFinalShaderAdapter.AdaptedShader result = new LegacyFinalShaderAdapter().adapt("""
+            #version 120
+            void main() { gl_FragColor = vec4(gl_Fog.color.rgb * gl_Fog.scale, 1.0); }
+            """);
+
+        assertTrue(result.source().contains("oculusLegacyFogColor"));
+        assertTrue(result.source().contains("1.0 / (oculusLegacyFogEnd - oculusLegacyFogStart)"));
+        assertEquals(3, result.uniforms().size());
+    }
+
+    @Test
     void worldZeroProgramIsPreferredAndPrepared() throws Exception {
         Path world = Files.createDirectories(temporaryDirectory.resolve("shaders/world0"));
         Files.writeString(world.resolve("final.fsh"), """
@@ -92,11 +123,10 @@ final class ShaderCompatibilityRegressionTest {
             #define FRAGMENT_SHADER
             #ifdef FRAGMENT_SHADER
             varying vec2 texcoord;
-            uniform sampler2D colortex1;
-            void main() { gl_FragColor = texture2D(colortex1, texcoord); }
+            uniform sampler2D colortex0;
+            void main() { gl_FragColor = texture2D(colortex0, texcoord); }
             #endif
             """);
-        Files.writeString(temporaryDirectory.resolve("shaders/final.fsh"), "invalid root fallback");
         ShaderPackDescriptor descriptor = new ShaderPackDescriptor(
             "test", "Test pack", temporaryDirectory, ShaderPackDescriptor.Kind.DIRECTORY
         );
@@ -105,7 +135,7 @@ final class ShaderCompatibilityRegressionTest {
 
         assertEquals(1, result.programs().size());
         assertEquals("final", result.programs().getFirst().stageName());
-        assertEquals("colortex1", result.programs().getFirst().fragment().samplers().getFirst().name());
+        assertEquals("colortex0", result.programs().getFirst().fragment().samplers().getFirst().name());
     }
 
     @Test

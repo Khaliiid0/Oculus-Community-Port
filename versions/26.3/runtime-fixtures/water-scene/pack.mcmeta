@@ -1,0 +1,7 @@
+{
+  "pack": {
+    "description": "LOCAL ONLY: Oculus 26.3 disposable water/dimension audit",
+    "min_format": [121, 0],
+    "max_format": [121, 0]
+  }
+}

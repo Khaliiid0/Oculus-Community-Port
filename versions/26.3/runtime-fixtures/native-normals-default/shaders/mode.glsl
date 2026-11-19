@@ -1,0 +1,2 @@
+#define REQUIRE_NORMAL_MAP 0
+#define NEGATIVE_NORMAL 0

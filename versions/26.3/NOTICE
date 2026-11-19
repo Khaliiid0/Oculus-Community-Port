@@ -1,0 +1,30 @@
+Oculus Community Port for Forge — Minecraft 26.3 module
+=====================================================
+
+Target: Minecraft 26.3 / Forge 66.1.2 / Java 25, OpenGL client.
+This is an unofficial community port, not an official Oculus, Iris, Forge,
+Sodium, Embeddium, Mojang or Microsoft release or endorsement.
+
+The community port is distributed under LGPL-3.0-only. See
+LICENSE-oculus-forge.txt (LGPLv3), the accompanying LICENSE-GPL-3.0.txt (GPLv3),
+and LICENSE_NOTES.md for provenance and corresponding-source build context.
+The included GPL text does not change this project's LGPL-3.0-only designation.
+
+The complete 26.3 source build uses versions/26.3 and the shared root src/, build
+wrapper, authored test inputs and third-party notices. A sources JAR alone is
+not the complete build tree. The 0.4.0-beta.4 source target is the separate branch
+https://github.com/Khaliiid0/Oculus-Community-Port/tree/release/26.3-0.4.0-beta.4
+See versions/26.3/SOURCE_BUILD.md there. Verify the corresponding revision before
+distributing a public binary; a local source ZIP alone is not public availability.
+
+JCPP 1.4.14, Copyright Shevek, is bundled under Apache License 2.0 and relocated
+to dev.oculusforge.bundle.jcpp. See META-INF/licenses/JCPP-LICENSE.txt.
+External shader packs, Minecraft game binaries and developer/runtime fixtures
+are not included in the mod binary.
+
+Minecraft and Mojang are trademarks of Microsoft Corporation. OptiFine and other
+shader renderers are incompatible with this port. This module does not claim
+Fabric, NeoForge, every shader option, or complete Iris rendering parity.
+
+The shader-prism icon is original AI-assisted community-port branding, not the
+original Oculus/Iris logo and not a gameplay screenshot.

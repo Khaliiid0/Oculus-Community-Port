@@ -1,0 +1,73 @@
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '7.0.31'
+}
+
+def smokeMinecraft = providers.gradleProperty('smokeMinecraft').get()
+def smokeForge = providers.gradleProperty('smokeForge').get()
+def smokeJava = providers.gradleProperty('smokeJava').map { it.toInteger() }.get()
+def smokeArtifact = providers.gradleProperty('oculusArtifact').map { file(it) }.get()
+def safeTarget = smokeMinecraft.replaceAll('[^A-Za-z0-9._-]', '_')
+def smokeRunTag = providers.gradleProperty('smokeRunTag').orElse('').get()
+if (!(smokeRunTag ==~ '[A-Za-z0-9_-]{0,48}')) throw new GradleException('Invalid isolated smoke-run tag')
+def smokeRunDirectory = layout.projectDirectory.dir("run-${safeTarget}${smokeRunTag.isEmpty() ? '' : '-' + smokeRunTag}")
+if (!(smokeMinecraft ==~ '(?:1\\.21\\.11|26\\.2)')
+    || !(smokeForge ==~ '(?:61\\.2\\.0|65\\.1\\.0)')) {
+    throw new GradleException("Unexpected smoke versions: ${smokeMinecraft}-${smokeForge}")
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(smokeJava)
+
+minecraft {
+    runs {
+        register('client') {
+            workingDir = smokeRunDirectory
+            systemProperty 'eventbus.api.strictRuntimeChecks', 'true'
+            systemProperty 'forge.logging.console.level', 'info'
+            systemProperty 'oculus.experimental.extendedTerrain', providers.gradleProperty('smokeExtendedTerrain').orElse('false').get()
+            systemProperty 'oculus.experimental.hdrWorldScene', providers.gradleProperty('smokeHdrWorldScene').orElse('false').get()
+            systemProperty 'oculus.experimental.nativeEndSky', providers.gradleProperty('smokeNativeEndSky').orElse('false').get()
+            systemProperty 'oculus.diagnostic.capturePostStages', providers.gradleProperty('smokeCapturePostStages').orElse('false').get()
+            systemProperty 'oculus.diagnostic.captureWorldStages', providers.gradleProperty('smokeCaptureWorldStages').orElse('false').get()
+            systemProperty 'oculus.diagnostic.captureRoot', providers.gradleProperty('smokeCaptureRoot').orElse('shaders/world1').get()
+        }
+    }
+}
+
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${smokeMinecraft}-${smokeForge}")
+}
+
+tasks.register('stageOculusArtifact') {
+    inputs.file(smokeArtifact)
+    doLast {
+        if (!smokeArtifact.isFile() || !smokeArtifact.name.endsWith('.jar')
+            || smokeArtifact.name.contains('-sources')) {
+            throw new GradleException("Not a production Oculus JAR: ${smokeArtifact}")
+        }
+        def mods = smokeRunDirectory.dir('mods').asFile
+        mods.mkdirs()
+        def existing = mods.listFiles()?.findAll { it.name.startsWith('oculus-forge-') } ?: []
+        if (!existing.isEmpty() && !(existing.size() == 1 && existing[0].name == smokeArtifact.name
+            && java.nio.file.Files.mismatch(existing[0].toPath(), smokeArtifact.toPath()) == -1L)) {
+            throw new GradleException("Smoke mods directory contains a different Oculus artifact: ${existing*.name}")
+        }
+        java.nio.file.Files.copy(smokeArtifact.toPath(), new File(mods, smokeArtifact.name).toPath(),
+            java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+    }
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('stageOculusArtifact')
+}
+
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}

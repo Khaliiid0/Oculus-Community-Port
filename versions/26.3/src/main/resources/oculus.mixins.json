@@ -1,0 +1,26 @@
+{
+  "required": true,
+  "minVersion": "0.8.7",
+  "package": "dev.oculusforge.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "GlStateManagerMixin",
+    "RenderPassMixin",
+    "RenderSystemMixin",
+    "RenderTargetMixin",
+    "CameraMixin",
+    "CameraRenderStateMixin",
+    "GameRendererMixin",
+    "SectionMaterialMixin",
+    "SectionLayerRoutingMixin",
+    "ChunkSectionLayerMixin",
+    "TerrainBufferBuilderMixin",
+    "ChunkSectionsToRenderMixin",
+    "LevelRendererMixin",
+    "SkyRendererMixin",
+    "TerrainBackendMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

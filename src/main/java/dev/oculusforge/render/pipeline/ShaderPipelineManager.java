@@ -40,7 +40,7 @@ public final class ShaderPipelineManager implements AutoCloseable {
       try {
          PackShaderPipeline replacement = this.compiler.compile(prepared);
          PackShaderPipeline previous = this.active;
-         this.active = replacement;
+         installReplacement(replacement);
          this.state = ShaderPipelineManager.State.READY;
          this.lastError = "";
          closeSuperseded(previous);
@@ -59,7 +59,7 @@ public final class ShaderPipelineManager implements AutoCloseable {
       try {
          PackShaderPipeline replacement = this.compiler.compile(prepared);
          PackShaderPipeline previous = this.active;
-         this.active = replacement;
+         installReplacement(replacement);
          this.state = ShaderPipelineManager.State.READY;
          this.lastError = replacementError;
          closeSuperseded(previous);
@@ -67,6 +67,7 @@ public final class ShaderPipelineManager implements AutoCloseable {
          return true;
       } catch (RuntimeException | ShaderCompatibilityException exception) {
          PackShaderPipeline previous = this.active;
+         dev.oculusforge.render.world.BlockLayerOverrides.install(java.util.Map.of());
          this.active = null;
          closeSuperseded(previous);
          String detail = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
@@ -77,9 +78,18 @@ public final class ShaderPipelineManager implements AutoCloseable {
       }
    }
 
+   public void keepActive(String message) {
+      RenderSystem.assertOnRenderThread();
+      if (active == null) { reject(message); return; }
+      lastError = message;
+      state = State.READY;
+      OculusForge.LOGGER.warn("Shader-only replacement rejected; keeping '{}' active: {}", active.packId(), message);
+   }
+
    public void deactivate() {
       RenderSystem.assertOnRenderThread();
       PackShaderPipeline previous = this.active;
+      dev.oculusforge.render.world.BlockLayerOverrides.install(java.util.Map.of());
       this.active = null;
       closeSuperseded(previous);
 
@@ -90,6 +100,7 @@ public final class ShaderPipelineManager implements AutoCloseable {
    public void reject(String message) {
       RenderSystem.assertOnRenderThread();
       PackShaderPipeline previous = this.active;
+      dev.oculusforge.render.world.BlockLayerOverrides.install(java.util.Map.of());
       this.active = null;
       closeSuperseded(previous);
       this.lastError = message;
@@ -101,12 +112,24 @@ public final class ShaderPipelineManager implements AutoCloseable {
       RenderSystem.assertOnRenderThread();
       String message = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
       PackShaderPipeline previous = this.active;
+      dev.oculusforge.render.world.BlockLayerOverrides.install(java.util.Map.of());
       this.active = null;
       closeSuperseded(previous);
 
       this.state = ShaderPipelineManager.State.ERROR;
       this.lastError = "The shader pass failed at runtime: " + message;
       OculusForge.LOGGER.error("{} Vanilla rendering has been restored.", this.lastError, exception);
+   }
+
+   private void installReplacement(PackShaderPipeline replacement) {
+      try {
+         dev.oculusforge.render.world.BlockLayerOverrides.install(replacement.world() == null
+            ? java.util.Map.of() : replacement.world().layerOverrides());
+         this.active = replacement;
+      } catch (RuntimeException | Error failure) {
+         try { replacement.close(); } catch (RuntimeException cleanup) { failure.addSuppressed(cleanup); }
+         throw failure;
+      }
    }
 
    private void keepPreviousOrFail(String context, Exception exception) {

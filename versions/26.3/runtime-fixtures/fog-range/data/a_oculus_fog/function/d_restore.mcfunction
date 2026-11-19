@@ -1,0 +1,2 @@
+gamerule minecraft:advance_time true
+say OCULUS_FOG_TIME_RESTORED
